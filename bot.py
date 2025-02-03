@@ -11,6 +11,8 @@ import requests
 import http.server
 import threading
 import socketserver
+from pytube import YouTube
+import moviepy.editor as mp
 
 # Logging ayarları
 logging.basicConfig(
@@ -665,81 +667,44 @@ async def youtube_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         download_path = os.path.join(os.getcwd(), "downloads")
         os.makedirs(download_path, exist_ok=True)
         
-        # spotdl komutunu çalıştır
-        process = subprocess.Popen(
-            [
-                "spotdl",
-                "--output", download_path,
-                "--format", "mp3",
-                "--bitrate", "320k",
-                url
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            encoding='utf-8',
-            errors='ignore'
+        # YouTube videosunu indir
+        yt = YouTube(url)
+        video = yt.streams.filter(only_audio=True).first()
+        
+        # Video başlığındaki geçersiz karakterleri temizle
+        safe_title = "".join([c for c in yt.title if c.isalnum() or c in (' ', '-', '_')]).rstrip()
+        
+        # Önce video olarak indir
+        video_file = video.download(
+            output_path=download_path,
+            filename=f"{safe_title}.mp4"
         )
         
-        # Çıktıyı gerçek zamanlı olarak kontrol et
-        while True:
-            output = process.stdout.readline()
-            if output == '' and process.poll() is not None:
-                break
-            if output:
-                output = output.strip()
-                logger.info(output)
-                if "ERROR" in output or "Error" in output:
-                    await update.message.reply_text(f"❌ Hata: {output}")
+        # MP3'e dönüştür
+        mp3_path = os.path.join(download_path, f"{safe_title}.mp3")
+        video_clip = mp.AudioFileClip(video_file)
+        video_clip.write_audiofile(mp3_path)
+        video_clip.close()
         
-        # İşlem tamamlandı, çıktıyı kontrol et
-        stdout, stderr = process.communicate()
+        # MP4 dosyasını sil
+        os.remove(video_file)
         
-        if process.returncode != 0:
-            logger.error(f"YouTube indirme hatası: {stderr}")
-            await update.message.reply_text("❌ İndirme başarısız")
-            return
+        # Dosyayı Telegram'a gönder
+        try:
+            with open(mp3_path, 'rb') as audio_file:
+                await context.bot.send_audio(
+                    chat_id=chat_id,
+                    audio=audio_file,
+                    title=yt.title,
+                    performer=yt.author,
+                    caption=f"🎵 {yt.title}\n👤 {yt.author}\n📺 YouTube"
+                )
+            await update.message.reply_text("✅ YouTube indirme tamamlandı!")
+        except Exception as e:
+            logger.error(f"Dosya gönderme hatası: {str(e)}")
+            await update.message.reply_text("❌ Dosya gönderme başarısız")
         
-        # İndirme sonrası biraz bekle
-        await asyncio.sleep(3)
-        
-        # İndirilen dosyaları bul
-        all_files = []
-        for file in os.listdir(download_path):
-            if file.endswith('.mp3'):
-                all_files.append(os.path.join(download_path, file))
-        
-        if not all_files:
-            await update.message.reply_text("❌ İndirilen şarkı bulunamadı")
-            return
-        
-        # Her dosyayı gönder
-        for file_path in all_files:
-            try:
-                # Dosya bilgilerini al
-                file_name = os.path.basename(file_path)
-                title = os.path.splitext(file_name)[0]
-                
-                # Dosya adından sanatçı ve başlığı ayır
-                if " - " in title:
-                    artist, song_title = title.split(" - ", 1)
-                else:
-                    artist = "YouTube"
-                    song_title = title
-                
-                # Dosyayı Telegram'a gönder
-                with open(file_path, 'rb') as audio_file:
-                    await context.bot.send_audio(
-                        chat_id=chat_id,
-                        audio=audio_file,
-                        title=song_title,
-                        performer=artist,
-                        caption=f"🎵 {song_title}\n👤 {artist}\n📺 YouTube"
-                    )
-            except Exception as e:
-                logger.error(f"Dosya gönderme hatası: {str(e)}")
-                continue
-        
-        await update.message.reply_text("✅ YouTube indirme tamamlandı!")
+        # Temizlik
         clean_downloads()
             
     except Exception as e:

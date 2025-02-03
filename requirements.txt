@@ -2,5 +2,6 @@ python-telegram-bot
 tidal-dl
 requests
 python-dotenv
-spotdl
+pytube
+moviepy
 beautifulsoup4 
