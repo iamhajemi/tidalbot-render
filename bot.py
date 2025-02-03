@@ -669,32 +669,28 @@ async def youtube_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # YouTube videosunu indir
         yt = YouTube(url)
-        video = yt.streams.filter(only_audio=True).first()
+        audio_stream = yt.streams.filter(only_audio=True, file_extension='mp4').first()
         
         # Video başlığındaki geçersiz karakterleri temizle
         safe_title = "".join([c for c in yt.title if c.isalnum() or c in (' ', '-', '_')]).rstrip()
         
-        # Önce video olarak indir
-        video_file = video.download(
+        # Ses dosyasını indir
+        audio_file = audio_stream.download(
             output_path=download_path,
             filename=f"{safe_title}.mp4"
         )
         
-        # MP3'e dönüştür
-        mp3_path = os.path.join(download_path, f"{safe_title}.mp3")
-        video_clip = mp.AudioFileClip(video_file)
-        video_clip.write_audiofile(mp3_path)
-        video_clip.close()
-        
-        # MP4 dosyasını sil
-        os.remove(video_file)
+        # Dosya adını .mp3 olarak değiştir
+        base, _ = os.path.splitext(audio_file)
+        mp3_file = base + '.mp3'
+        os.rename(audio_file, mp3_file)
         
         # Dosyayı Telegram'a gönder
         try:
-            with open(mp3_path, 'rb') as audio_file:
+            with open(mp3_file, 'rb') as audio:
                 await context.bot.send_audio(
                     chat_id=chat_id,
-                    audio=audio_file,
+                    audio=audio,
                     title=yt.title,
                     performer=yt.author,
                     caption=f"🎵 {yt.title}\n👤 {yt.author}\n📺 YouTube"

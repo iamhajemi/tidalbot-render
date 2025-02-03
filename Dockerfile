@@ -6,6 +6,9 @@ RUN apt-get update && \
     ffmpeg \
     git \
     curl \
+    procps \
+    psmisc \
+    imagemagick \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -23,8 +26,7 @@ RUN git init && \
     git commit -m "Initial commit"
 
 # Python bağımlılıklarını yükle ve yt-dlp'yi güncelle
-RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir --upgrade yt-dlp
+RUN pip install --no-cache-dir -r requirements.txt
 
 # downloads klasörünü oluştur
 RUN mkdir -p downloads
@@ -34,5 +36,9 @@ RUN chmod +x run.sh
 
 # Tidal yapılandırma dosyasını kopyala
 RUN mkdir -p /root/.cache/tidal-dl
+
+# Port ayarı
+ENV PORT=10000
+EXPOSE 10000
 
 CMD ["./run.sh"] 

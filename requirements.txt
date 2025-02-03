@@ -3,5 +3,4 @@ tidal-dl
 requests
 python-dotenv
 pytube
-moviepy
 beautifulsoup4 
