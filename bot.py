@@ -8,6 +8,9 @@ import shutil
 import json
 import logging
 import requests
+import http.server
+import threading
+import socketserver
 
 # Logging ayarları
 logging.basicConfig(
@@ -792,6 +795,25 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_quality_keyboard()
         )
 
+# Health check için HTTP sunucusu
+class HealthCheckHandler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'OK')
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+def run_health_server():
+    port = int(os.environ.get('PORT', 10000))
+    handler = HealthCheckHandler
+    with socketserver.TCPServer(("", port), handler) as httpd:
+        print(f"Health check sunucusu port {port}'de başlatıldı")
+        httpd.serve_forever()
+
 def main():
     logger.info("Bot başlatılıyor...")
     
@@ -801,6 +823,11 @@ def main():
     # Tidal yapılandırmasını ayarla
     setup_tidal()
     
+    # Health check sunucusunu ayrı bir thread'de başlat
+    health_thread = threading.Thread(target=run_health_server, daemon=True)
+    health_thread.start()
+    
+    # Ana bot uygulamasını başlat
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     
     application.add_handler(CommandHandler("start", start))

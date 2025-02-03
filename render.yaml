@@ -1,11 +1,12 @@
 services:
-  - type: worker
+  - type: web
     name: tidalbot-render
     env: docker
     repo: https://github.com/yourusername/tidalbot-render.git
     region: frankfurt
     plan: free
     branch: main
+    healthCheckPath: /health
     envVars:
       - key: TELEGRAM_TOKEN
         sync: false
