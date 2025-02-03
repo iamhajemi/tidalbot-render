@@ -12,7 +12,6 @@ import http.server
 import threading
 import socketserver
 from pytube import YouTube
-import moviepy.editor as mp
 
 # Logging ayarları
 logging.basicConfig(
