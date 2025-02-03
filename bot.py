@@ -810,12 +810,35 @@ class HealthCheckHandler(http.server.SimpleHTTPRequestHandler):
 def run_health_server():
     port = int(os.environ.get('PORT', 10000))
     handler = HealthCheckHandler
-    with socketserver.TCPServer(("", port), handler) as httpd:
-        print(f"Health check sunucusu port {port}'de başlatıldı")
-        httpd.serve_forever()
+    
+    # Portu serbest bırakmaya çalış
+    try:
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(('', port))
+        sock.close()
+    except Exception as e:
+        logger.error(f"Port temizleme hatası: {str(e)}")
+    
+    try:
+        with socketserver.TCPServer(("", port), handler) as httpd:
+            logger.info(f"Health check sunucusu port {port}'de başlatıldı")
+            httpd.serve_forever()
+    except Exception as e:
+        logger.error(f"Health check sunucusu hatası: {str(e)}")
 
 def main():
     logger.info("Bot başlatılıyor...")
+    
+    # Mevcut webhook'u temizle
+    try:
+        requests.post(
+            f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook',
+            json={'drop_pending_updates': True}
+        )
+    except Exception as e:
+        logger.error(f"Webhook temizleme hatası: {str(e)}")
     
     # GitHub'dan güncelle
     update_from_github()
@@ -838,7 +861,7 @@ def main():
     application.add_error_handler(error_handler)
     
     logger.info("Bot hazır, çalışmaya başlıyor...")
-    application.run_polling()
+    application.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
     main() 
