@@ -12,6 +12,7 @@ import http.server
 import threading
 import socketserver
 from pytube import YouTube
+import time
 
 # Logging ayarları
 logging.basicConfig(
@@ -666,33 +667,41 @@ async def youtube_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         download_path = os.path.join(os.getcwd(), "downloads")
         os.makedirs(download_path, exist_ok=True)
         
-        # YouTube videosunu indir
-        yt = YouTube(url)
-        audio_stream = yt.streams.filter(only_audio=True, file_extension='mp4').first()
+        # yt-dlp komutunu çalıştır
+        process = subprocess.Popen([
+            "yt-dlp",
+            "--no-check-certificates",  # Sertifika kontrolünü devre dışı bırak
+            "--no-warnings",  # Uyarıları gösterme
+            "--extract-audio",  # Sadece ses
+            "--audio-format", "mp3",  # MP3 formatı
+            "--audio-quality", "0",  # En iyi kalite
+            "--output", os.path.join(download_path, "%(title)s.%(ext)s"),  # Çıktı formatı
+            "--no-playlist",  # Playlist'i indirme
+            url
+        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
-        # Video başlığındaki geçersiz karakterleri temizle
-        safe_title = "".join([c for c in yt.title if c.isalnum() or c in (' ', '-', '_')]).rstrip()
+        stdout, stderr = process.communicate()
         
-        # Ses dosyasını indir
-        audio_file = audio_stream.download(
-            output_path=download_path,
-            filename=f"{safe_title}.mp4"
-        )
+        if process.returncode != 0:
+            logger.error(f"YouTube indirme hatası: {stderr.decode()}")
+            await update.message.reply_text("❌ İndirme başarısız")
+            return
         
-        # Dosya adını .mp3 olarak değiştir
-        base, _ = os.path.splitext(audio_file)
-        mp3_file = base + '.mp3'
-        os.rename(audio_file, mp3_file)
+        # İndirilen dosyayı bul
+        mp3_files = [f for f in os.listdir(download_path) if f.endswith('.mp3')]
+        if not mp3_files:
+            await update.message.reply_text("❌ İndirilen dosya bulunamadı")
+            return
+        
+        mp3_path = os.path.join(download_path, mp3_files[0])
         
         # Dosyayı Telegram'a gönder
         try:
-            with open(mp3_file, 'rb') as audio:
+            with open(mp3_path, 'rb') as audio:
                 await context.bot.send_audio(
                     chat_id=chat_id,
                     audio=audio,
-                    title=yt.title,
-                    performer=yt.author,
-                    caption=f"🎵 {yt.title}\n👤 {yt.author}\n📺 YouTube"
+                    caption=f"🎵 {os.path.splitext(mp3_files[0])[0]}\n📺 YouTube"
                 )
             await update.message.reply_text("✅ YouTube indirme tamamlandı!")
         except Exception as e:
@@ -793,11 +802,10 @@ def main():
             f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook',
             json={'drop_pending_updates': True}
         )
+        # Biraz bekle
+        time.sleep(2)
     except Exception as e:
         logger.error(f"Webhook temizleme hatası: {str(e)}")
-    
-    # GitHub'dan güncelle
-    update_from_github()
     
     # Tidal yapılandırmasını ayarla
     setup_tidal()
@@ -817,7 +825,7 @@ def main():
     application.add_error_handler(error_handler)
     
     logger.info("Bot hazır, çalışmaya başlıyor...")
-    application.run_polling(drop_pending_updates=True)
+    application.run_polling(drop_pending_updates=True, allowed_updates=[])
 
 if __name__ == '__main__':
     main() 
