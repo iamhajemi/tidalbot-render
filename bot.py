@@ -11,7 +11,6 @@ import requests
 import http.server
 import threading
 import socketserver
-from pytube import YouTube
 import time
 
 # Logging ayarları
@@ -667,46 +666,65 @@ async def youtube_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         download_path = os.path.join(os.getcwd(), "downloads")
         os.makedirs(download_path, exist_ok=True)
         
-        # yt-dlp komutunu çalıştır
-        process = subprocess.Popen([
-            "yt-dlp",
-            "--no-check-certificates",  # Sertifika kontrolünü devre dışı bırak
-            "--no-warnings",  # Uyarıları gösterme
-            "--extract-audio",  # Sadece ses
-            "--audio-format", "mp3",  # MP3 formatı
-            "--audio-quality", "0",  # En iyi kalite
-            "--output", os.path.join(download_path, "%(title)s.%(ext)s"),  # Çıktı formatı
-            "--no-playlist",  # Playlist'i indirme
-            url
-        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        # youtube-dl-api-server'ı başlat
+        api_process = subprocess.Popen(
+            ["youtube-dl-server"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
         
-        stdout, stderr = process.communicate()
+        # API'nin başlaması için biraz bekle
+        await asyncio.sleep(3)
         
-        if process.returncode != 0:
-            logger.error(f"YouTube indirme hatası: {stderr.decode()}")
-            await update.message.reply_text("❌ İndirme başarısız")
-            return
-        
-        # İndirilen dosyayı bul
-        mp3_files = [f for f in os.listdir(download_path) if f.endswith('.mp3')]
-        if not mp3_files:
-            await update.message.reply_text("❌ İndirilen dosya bulunamadı")
-            return
-        
-        mp3_path = os.path.join(download_path, mp3_files[0])
-        
-        # Dosyayı Telegram'a gönder
         try:
-            with open(mp3_path, 'rb') as audio:
+            # Video bilgilerini al
+            info_response = requests.get(f"http://localhost:9191/api/info?url={url}")
+            if info_response.status_code != 200:
+                raise Exception("Video bilgileri alınamadı")
+            
+            video_info = info_response.json()
+            video_title = video_info.get('title', 'video')
+            
+            # Dosya adını temizle
+            safe_title = "".join([c for c in video_title if c.isalnum() or c in (' ', '-', '_')]).rstrip()
+            output_file = os.path.join(download_path, f"{safe_title}.mp3")
+            
+            # Videoyu indir
+            download_response = requests.get(
+                "http://localhost:9191/api/download",
+                params={
+                    "url": url,
+                    "format": "mp3",
+                    "output": output_file
+                },
+                stream=True
+            )
+            
+            if download_response.status_code != 200:
+                raise Exception("İndirme başarısız")
+            
+            # Dosyayı kaydet
+            with open(output_file, 'wb') as f:
+                for chunk in download_response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+            
+            # Dosyayı Telegram'a gönder
+            with open(output_file, 'rb') as audio:
                 await context.bot.send_audio(
                     chat_id=chat_id,
                     audio=audio,
-                    caption=f"🎵 {os.path.splitext(mp3_files[0])[0]}\n📺 YouTube"
+                    title=video_title,
+                    caption=f"🎵 {video_title}\n📺 YouTube"
                 )
+            
             await update.message.reply_text("✅ YouTube indirme tamamlandı!")
-        except Exception as e:
-            logger.error(f"Dosya gönderme hatası: {str(e)}")
-            await update.message.reply_text("❌ Dosya gönderme başarısız")
+            
+        finally:
+            # API sunucusunu durdur
+            if api_process:
+                api_process.terminate()
+                api_process.wait()
         
         # Temizlik
         clean_downloads()
@@ -715,6 +733,9 @@ async def youtube_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Hata: {str(e)}")
         await update.message.reply_text("❌ İşlem başarısız")
         clean_downloads()
+        if api_process:
+            api_process.terminate()
+            api_process.wait()
 
 async def mode_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Mod seçimi butonlarını işle"""

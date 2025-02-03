@@ -2,5 +2,5 @@ python-telegram-bot
 tidal-dl
 requests
 python-dotenv
-yt-dlp
+youtube-dl-server
 beautifulsoup4 
