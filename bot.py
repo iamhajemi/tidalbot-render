@@ -12,7 +12,7 @@ import http.server
 import threading
 import socketserver
 import time
-from pytube import YouTube
+import youtube_dl
 
 # Logging ayarları
 logging.basicConfig(
@@ -667,32 +667,51 @@ async def youtube_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         download_path = os.path.join(os.getcwd(), "downloads")
         os.makedirs(download_path, exist_ok=True)
         
-        # YouTube videosunu al
-        yt = YouTube(url)
+        # youtube_dl seçenekleri
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': os.path.join(download_path, '%(title)s.%(ext)s'),
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '320',
+            }],
+            'prefer_ffmpeg': True,
+            'keepvideo': False,
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': True,
+            'force_generic_extractor': False,
+            'nocheckcertificate': True,
+            'ignoreerrors': False,
+            'logtostderr': False,
+            'no_color': True
+        }
         
-        # Sadece ses akışını seç
-        audio_stream = yt.streams.filter(only_audio=True).first()
-        
-        # Dosya adını temizle
-        safe_title = "".join([c for c in yt.title if c.isalnum() or c in (' ', '-', '_')]).rstrip()
-        output_file = os.path.join(download_path, f"{safe_title}")
-        
-        # Ses dosyasını indir
-        audio_file = audio_stream.download(output_path=download_path, filename=safe_title)
-        
-        # MP3'e dönüştür
-        base, _ = os.path.splitext(audio_file)
-        mp3_file = base + '.mp3'
-        os.rename(audio_file, mp3_file)
+        # Video bilgilerini al
+        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            video_title = info['title']
+            video_author = info.get('uploader', 'Unknown')
+            
+            # Dosya adını temizle
+            safe_title = "".join([c for c in video_title if c.isalnum() or c in (' ', '-', '_')]).rstrip()
+            output_file = os.path.join(download_path, f"{safe_title}.mp3")
+            
+            # İndirme seçeneklerini güncelle
+            ydl_opts['outtmpl'] = os.path.join(download_path, f"{safe_title}.%(ext)s")
+            
+            # Videoyu indir
+            ydl.download([url])
         
         # Dosyayı Telegram'a gönder
-        with open(mp3_file, 'rb') as audio:
+        with open(output_file, 'rb') as audio:
             await context.bot.send_audio(
                 chat_id=chat_id,
                 audio=audio,
-                title=yt.title,
-                performer=yt.author,
-                caption=f"🎵 {yt.title}\n👤 {yt.author}\n📺 YouTube"
+                title=video_title,
+                performer=video_author,
+                caption=f"🎵 {video_title}\n👤 {video_author}\n📺 YouTube"
             )
         
         await update.message.reply_text("✅ YouTube indirme tamamlandı!")
