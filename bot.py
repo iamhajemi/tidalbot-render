@@ -665,17 +665,13 @@ async def youtube_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         download_path = os.path.join(os.getcwd(), "downloads")
         os.makedirs(download_path, exist_ok=True)
         
-        # yt-dlp komutunu çalıştır
+        # spotdl komutunu çalıştır
         process = subprocess.Popen(
             [
-                "yt-dlp",
-                "-x",  # Sadece ses
-                "--audio-format", "mp3",  # MP3 formatı
-                "--audio-quality", "0",  # En iyi kalite
-                "--embed-metadata",  # Metadatayı ekle
-                "--parse-metadata", "title:%(title)s",  # Başlığı al
-                "--parse-metadata", "artist:%(uploader)s",  # Yükleyeni sanatçı olarak al
-                "-o", os.path.join(download_path, "%(title)s - %(uploader)s.%(ext)s"),  # Çıktı formatı
+                "spotdl",
+                "--output", download_path,
+                "--format", "mp3",
+                "--bitrate", "320k",
                 url
             ],
             stdout=subprocess.PIPE,
