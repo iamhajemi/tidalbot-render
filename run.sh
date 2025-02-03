@@ -4,6 +4,11 @@
 git config --global user.email "bot@example.com"
 git config --global user.name "TidalBot"
 
+# Git remote'u ekle (eğer yoksa)
+if ! git remote | grep -q '^origin$'; then
+    git remote add origin https://github.com/iamhajemi/tidalbot-render.git
+fi
+
 check_updates() {
     # Uzak değişiklikleri kontrol et
     git fetch origin main

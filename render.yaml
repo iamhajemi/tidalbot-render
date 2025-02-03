@@ -2,7 +2,7 @@ services:
   - type: web
     name: tidalbot-render
     env: docker
-    repo: https://github.com/yourusername/tidalbot-render.git
+    repo: https://github.com/iamhajemi/tidalbot-render.git
     region: frankfurt
     plan: free
     branch: main

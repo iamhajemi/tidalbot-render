@@ -11,16 +11,16 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# Git repository'yi klonla ve yapılandır
-RUN git clone https://github.com/yourusername/tidalbot-render.git . && \
-    git config --global user.email "bot@example.com" && \
-    git config --global user.name "TidalBot"
-
 # Gerekli dosyaları kopyala
-COPY requirements.txt .
-COPY bot.py .
-COPY run.sh .
-COPY default/ default/
+COPY . .
+
+# Git repository'yi initialize et
+RUN git init && \
+    git config --global user.email "bot@example.com" && \
+    git config --global user.name "TidalBot" && \
+    git config --global --add safe.directory /app && \
+    git add . && \
+    git commit -m "Initial commit"
 
 # Python bağımlılıklarını yükle ve yt-dlp'yi güncelle
 RUN pip install --no-cache-dir -r requirements.txt && \
