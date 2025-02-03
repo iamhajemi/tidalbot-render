@@ -12,8 +12,7 @@ import http.server
 import threading
 import socketserver
 import time
-import pafy
-from youtubesearchpython import VideosSearch
+from pytube import YouTube
 
 # Logging ayarları
 logging.basicConfig(
@@ -36,9 +35,6 @@ QUALITY_OPTIONS = {
 
 # Kullanıcı kalite ayarları
 user_quality = {}
-
-# Pafy için YouTube API key ayarla
-pafy.set_api_key("AIzaSyBRXEq3xnQtxznUBsf3Oq6vFSIlA5JFxvE")
 
 def update_from_github():
     logger.info("GitHub'dan güncel kod alınıyor...")
@@ -671,47 +667,32 @@ async def youtube_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         download_path = os.path.join(os.getcwd(), "downloads")
         os.makedirs(download_path, exist_ok=True)
         
-        # Video ID'yi al
-        video_id = None
-        if 'youtube.com' in url:
-            video_id = re.search(r'v=([^&]+)', url).group(1)
-        elif 'youtu.be' in url:
-            video_id = url.split('/')[-1]
+        # YouTube videosunu al
+        yt = YouTube(url)
         
-        if not video_id:
-            raise Exception("Video ID bulunamadı")
-        
-        # Video bilgilerini al
-        videos_search = VideosSearch(video_id, limit=1)
-        video_result = videos_search.result()
-        if not video_result['result']:
-            raise Exception("Video bulunamadı")
-        
-        video_info = video_result['result'][0]
-        video_title = video_info['title']
-        channel_name = video_info['channel']['name']
+        # Sadece ses akışını seç
+        audio_stream = yt.streams.filter(only_audio=True).first()
         
         # Dosya adını temizle
-        safe_title = "".join([c for c in video_title if c.isalnum() or c in (' ', '-', '_')]).rstrip()
-        output_file = os.path.join(download_path, f"{safe_title}.mp3")
-        
-        # Video nesnesini oluştur
-        video = pafy.new(video_id)
-        
-        # En iyi ses kalitesini seç
-        audio_stream = video.getbestaudio()
+        safe_title = "".join([c for c in yt.title if c.isalnum() or c in (' ', '-', '_')]).rstrip()
+        output_file = os.path.join(download_path, f"{safe_title}")
         
         # Ses dosyasını indir
-        audio_stream.download(filepath=output_file)
+        audio_file = audio_stream.download(output_path=download_path, filename=safe_title)
+        
+        # MP3'e dönüştür
+        base, _ = os.path.splitext(audio_file)
+        mp3_file = base + '.mp3'
+        os.rename(audio_file, mp3_file)
         
         # Dosyayı Telegram'a gönder
-        with open(output_file, 'rb') as audio:
+        with open(mp3_file, 'rb') as audio:
             await context.bot.send_audio(
                 chat_id=chat_id,
                 audio=audio,
-                title=video_title,
-                performer=channel_name,
-                caption=f"🎵 {video_title}\n👤 {channel_name}\n📺 YouTube"
+                title=yt.title,
+                performer=yt.author,
+                caption=f"🎵 {yt.title}\n👤 {yt.author}\n📺 YouTube"
             )
         
         await update.message.reply_text("✅ YouTube indirme tamamlandı!")
