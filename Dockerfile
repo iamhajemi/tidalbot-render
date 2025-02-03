@@ -11,6 +11,11 @@ RUN apt-get update && \
 
 WORKDIR /app
 
+# Git repository'yi klonla ve yapılandır
+RUN git clone https://github.com/yourusername/tidalbot-render.git . && \
+    git config --global user.email "bot@example.com" && \
+    git config --global user.name "TidalBot"
+
 # Gerekli dosyaları kopyala
 COPY requirements.txt .
 COPY bot.py .
@@ -22,7 +27,7 @@ RUN pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir --upgrade yt-dlp
 
 # downloads klasörünü oluştur
-RUN mkdir downloads
+RUN mkdir -p downloads
 
 # Çalışma izinlerini ayarla
 RUN chmod +x run.sh

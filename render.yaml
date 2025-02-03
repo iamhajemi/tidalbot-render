@@ -6,6 +6,7 @@ services:
     region: frankfurt
     plan: free
     branch: main
+    buildCommand: git config --global --add safe.directory /app
     healthCheckPath: /health
     envVars:
       - key: TELEGRAM_TOKEN
