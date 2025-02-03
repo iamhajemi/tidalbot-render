@@ -768,39 +768,6 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_quality_keyboard()
         )
 
-# Health check için HTTP sunucusu
-class HealthCheckHandler(http.server.SimpleHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == '/health':
-            self.send_response(200)
-            self.send_header('Content-type', 'text/plain')
-            self.end_headers()
-            self.wfile.write(b'OK')
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-def run_health_server():
-    port = int(os.environ.get('PORT', 10000))
-    handler = HealthCheckHandler
-    
-    # Portu serbest bırakmaya çalış
-    try:
-        import socket
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(('', port))
-        sock.close()
-    except Exception as e:
-        logger.error(f"Port temizleme hatası: {str(e)}")
-    
-    try:
-        with socketserver.TCPServer(("", port), handler) as httpd:
-            logger.info(f"Health check sunucusu port {port}'de başlatıldı")
-            httpd.serve_forever()
-    except Exception as e:
-        logger.error(f"Health check sunucusu hatası: {str(e)}")
-
 def main():
     logger.info("Bot başlatılıyor...")
     
@@ -818,10 +785,6 @@ def main():
     # Tidal yapılandırmasını ayarla
     setup_tidal()
     
-    # Health check sunucusunu ayrı bir thread'de başlat
-    health_thread = threading.Thread(target=run_health_server, daemon=True)
-    health_thread.start()
-    
     # Ana bot uygulamasını başlat
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     
@@ -833,7 +796,13 @@ def main():
     application.add_error_handler(error_handler)
     
     logger.info("Bot hazır, çalışmaya başlıyor...")
-    application.run_polling(drop_pending_updates=True, allowed_updates=[])
+    application.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
-    main() 
+    try:
+        main()
+    except KeyboardInterrupt:
+        logger.info("Bot durduruldu!")
+    except Exception as e:
+        logger.error(f"Beklenmeyen hata: {str(e)}")
+        raise 

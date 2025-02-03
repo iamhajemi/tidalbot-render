@@ -3,5 +3,8 @@
         pkgs.python39
         pkgs.python39Packages.pip
         pkgs.ffmpeg
+        pkgs.git
+        pkgs.nodejs
+        pkgs.yarn
     ];
 } 
