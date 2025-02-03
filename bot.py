@@ -12,6 +12,8 @@ import http.server
 import threading
 import socketserver
 import time
+import pafy
+from youtubesearchpython import VideosSearch
 
 # Logging ayarları
 logging.basicConfig(
@@ -34,6 +36,9 @@ QUALITY_OPTIONS = {
 
 # Kullanıcı kalite ayarları
 user_quality = {}
+
+# Pafy için YouTube API key ayarla
+pafy.set_api_key("AIzaSyBRXEq3xnQtxznUBsf3Oq6vFSIlA5JFxvE")
 
 def update_from_github():
     logger.info("GitHub'dan güncel kod alınıyor...")
@@ -666,65 +671,50 @@ async def youtube_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         download_path = os.path.join(os.getcwd(), "downloads")
         os.makedirs(download_path, exist_ok=True)
         
-        # youtube-dl-api-server'ı başlat
-        api_process = subprocess.Popen(
-            ["youtube-dl-server"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
+        # Video ID'yi al
+        video_id = None
+        if 'youtube.com' in url:
+            video_id = re.search(r'v=([^&]+)', url).group(1)
+        elif 'youtu.be' in url:
+            video_id = url.split('/')[-1]
         
-        # API'nin başlaması için biraz bekle
-        await asyncio.sleep(3)
+        if not video_id:
+            raise Exception("Video ID bulunamadı")
         
-        try:
-            # Video bilgilerini al
-            info_response = requests.get(f"http://localhost:9191/api/info?url={url}")
-            if info_response.status_code != 200:
-                raise Exception("Video bilgileri alınamadı")
-            
-            video_info = info_response.json()
-            video_title = video_info.get('title', 'video')
-            
-            # Dosya adını temizle
-            safe_title = "".join([c for c in video_title if c.isalnum() or c in (' ', '-', '_')]).rstrip()
-            output_file = os.path.join(download_path, f"{safe_title}.mp3")
-            
-            # Videoyu indir
-            download_response = requests.get(
-                "http://localhost:9191/api/download",
-                params={
-                    "url": url,
-                    "format": "mp3",
-                    "output": output_file
-                },
-                stream=True
+        # Video bilgilerini al
+        videos_search = VideosSearch(video_id, limit=1)
+        video_result = videos_search.result()
+        if not video_result['result']:
+            raise Exception("Video bulunamadı")
+        
+        video_info = video_result['result'][0]
+        video_title = video_info['title']
+        channel_name = video_info['channel']['name']
+        
+        # Dosya adını temizle
+        safe_title = "".join([c for c in video_title if c.isalnum() or c in (' ', '-', '_')]).rstrip()
+        output_file = os.path.join(download_path, f"{safe_title}.mp3")
+        
+        # Video nesnesini oluştur
+        video = pafy.new(video_id)
+        
+        # En iyi ses kalitesini seç
+        audio_stream = video.getbestaudio()
+        
+        # Ses dosyasını indir
+        audio_stream.download(filepath=output_file)
+        
+        # Dosyayı Telegram'a gönder
+        with open(output_file, 'rb') as audio:
+            await context.bot.send_audio(
+                chat_id=chat_id,
+                audio=audio,
+                title=video_title,
+                performer=channel_name,
+                caption=f"🎵 {video_title}\n👤 {channel_name}\n📺 YouTube"
             )
-            
-            if download_response.status_code != 200:
-                raise Exception("İndirme başarısız")
-            
-            # Dosyayı kaydet
-            with open(output_file, 'wb') as f:
-                for chunk in download_response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-            
-            # Dosyayı Telegram'a gönder
-            with open(output_file, 'rb') as audio:
-                await context.bot.send_audio(
-                    chat_id=chat_id,
-                    audio=audio,
-                    title=video_title,
-                    caption=f"🎵 {video_title}\n📺 YouTube"
-                )
-            
-            await update.message.reply_text("✅ YouTube indirme tamamlandı!")
-            
-        finally:
-            # API sunucusunu durdur
-            if api_process:
-                api_process.terminate()
-                api_process.wait()
+        
+        await update.message.reply_text("✅ YouTube indirme tamamlandı!")
         
         # Temizlik
         clean_downloads()
@@ -733,9 +723,6 @@ async def youtube_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Hata: {str(e)}")
         await update.message.reply_text("❌ İşlem başarısız")
         clean_downloads()
-        if api_process:
-            api_process.terminate()
-            api_process.wait()
 
 async def mode_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Mod seçimi butonlarını işle"""
